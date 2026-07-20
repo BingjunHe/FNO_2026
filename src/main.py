@@ -4,6 +4,7 @@ import torch
 from torch.utils.data import Dataset, DataLoader
 import lightning as L
 from lightning.pytorch.callbacks import ModelCheckpoint, LearningRateMonitor
+from lightning.pytorch.callbacks import RichProgressBar
 
 from model.FNOModel import FNOModel
 
@@ -22,7 +23,7 @@ class HexFilterDataset(Dataset):
         
         # 读取高精度 3D 几何张量，直接加载至 CPU 内存中以备 DataLoader 调用。
         # 形状为 [Batch_Size, Channel=1, Nx, Ny, Nz]，完全保留了预处理时的多位小数高保真精度，中途无任何四舍五入。
-        self.X = torch.load(geometry_path, map_location="cpu").float()
+        self.X = torch.load(geometry_path, map_location="cpu", weights_only=False).float()
         
         # 载入训练的目标真值 Y (例如：HFSS 中导出的 3D 真实电磁场强度分布)
         if target_path and os.path.exists(target_path):
@@ -92,9 +93,9 @@ def main():
 
     # 4. 配置自动保存权重的回调函数 (Callbacks)
     checkpoint_callback = ModelCheckpoint(
-        monitor="val_loss",       # 监控验证集损失
+        monitor="val_MSE_loss",       # 监控验证集损失
         dirpath="./model/model-checkpoint/",   # 权重文件保存目录
-        filename="fno-3d-{epoch:02d}-{val_loss:.4f}",
+        filename="fno-3d-{epoch:02d}-{val_MSE_loss:.4f}",
         save_top_k=3,             # 只保留效果最好的 3 个模型权重
         mode="min",
     )
@@ -113,7 +114,7 @@ def main():
         # 这会让 3D 空间的前向和反向传播显存开销直接砍掉近 50%，同时成倍提升计算速度
         precision="16-mixed",     
         
-        callbacks=[checkpoint_callback, lr_monitor],
+        callbacks=[checkpoint_callback, lr_monitor, RichProgressBar()],
         log_every_n_steps=10,
         
         # 【备用显存大招】如果你的 3D 网格太大导致哪怕 batch_size=1 都爆显存：
