@@ -46,8 +46,8 @@ def main():
     L.seed_everything(42)
 
     # 指向你在上一步运行几何预处理代码后生成的 .pt 文件
-    GEOMETRY_FILE = "../data/fno_input_geometry_dataset.pt"
-    TARGET_FILE = "../data/fno_target_fields.pt"  # 预留你的真实仿真电场数据路径
+    GEOMETRY_FILE = "../data/fno2_input_geometry_dataset.pt"
+    TARGET_FILE = "../data/fno2_target_fields.pt"  # 预留你的真实仿真电场数据路径
 
     # 实例化自定义数据集
     # 此时网格分辨率直接继承自你预处理脚本里生成的尺寸 (如 64x64x256)
@@ -78,7 +78,7 @@ def main():
     )
 
     model = FNOModel(
-        num_layers=4,
+        num_layers=8,
         in_neurons=1,
         hidden_neurons=32,
         out_neurons=1,
@@ -88,15 +88,15 @@ def main():
         learning_rate=1e-3,
         restart_at_epoch_n=50,
         train_loader=train_loader,
-        loss_function='MSE'
+        loss_function='L2'
     )
 
     # 4. 配置自动保存权重的回调函数 (Callbacks)
     checkpoint_callback = ModelCheckpoint(
-        monitor="val_MSE_loss",       # 监控验证集损失
+        monitor="val_loss",       # 监控验证集损失
         dirpath="./model/model-checkpoint/",   # 权重文件保存目录
-        filename="fno-3d-{epoch:02d}-{val_MSE_loss:.4f}",
-        save_top_k=3,             # 只保留效果最好的 3 个模型权重
+        filename="fno-3d-{epoch:02d}-{val_loss:.4f}",
+        save_top_k=1,             # 只保留效果最好的 1 个模型权重
         mode="min",
     )
     

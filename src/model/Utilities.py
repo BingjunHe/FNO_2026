@@ -13,7 +13,6 @@ import pstats
 import snakeviz.cli as cli
 import scipy
 
-
 def npyToTorchDataLoader(
     npyFilePath, npyExtraPath=None,
     distribution=[0.8, 0.15, 0.05],

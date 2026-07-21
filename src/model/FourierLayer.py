@@ -83,3 +83,30 @@ class FourierLayer(nn.Module):
         out_ft = torch.fft.fftshift(out_ft, dim=(-3, -2, -1))
         out_ft = torch.fft.ifftn(out_ft, dim=[-3, -2, -1]).real
         return out_ft
+    
+class FourierLayer1D(nn.Module):
+    def __init__(self, in_channels, out_channels, modes):
+        super().__init__()
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.modes = modes  # 频域保留的模态数
+        self.scale = (1 / (in_channels * out_channels))
+        # 频域复数权重
+        self.weights = nn.Parameter(self.scale * torch.rand(in_channels, out_channels, self.modes, dtype=torch.cfloat))
+
+    def forward(self, x):
+        # 输入维度: [B, in_channels, Freq_Points] (例如 [B, 128, 601])
+        B, C, F = x.shape
+        
+        # Step 1: 沿频率轴进行一维快速傅里叶变换 (RFFT)
+        x_ft = torch.fft.rfft(x, dim=-1)
+        
+        # Step 2: 初始化频域输出张量
+        out_ft = torch.zeros(B, self.out_channels, F // 2 + 1, device=x.device, dtype=torch.cfloat)
+        
+        # Step 3: 乘上滤波器权重（只对低频的前 modes 个模态进行矩阵乘法，高频置零以平滑曲线）
+        out_ft[:, :, :self.modes] = torch.einsum("bix,iox->box", x_ft[:, :, :self.modes], self.weights)
+        
+        # Step 4: 一维逆快速傅里叶变换 (IRFFT)，精确还原回 F 个频点
+        x = torch.fft.irfft(out_ft, n=F, dim=-1)
+        return x

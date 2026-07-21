@@ -44,7 +44,7 @@ def generate_target_tensor(csv_path, output_dir="data"):
     # 3. 组合并保存
     Y_tensor = torch.tensor(np.array(Y_list), dtype=torch.float32)  # 形状: [80.0, 4.0, 601.0]
     
-    output_path = "../../data/fno_target_fields.pt"
+    output_path = "../../data/fno2_target_fields.pt"
     torch.save(Y_tensor, output_path)
     
     print(f"✅ Target 文件打包成功！已保存至: {output_path}")
@@ -106,7 +106,7 @@ def get_rotated_window_mask(X, Z, p1, p2, width, thickness):
     return cond_along & cond_across
 
 # ==================== 3. 读取数据集与参数配置 ====================
-csv_path = "../../data/formal2_training_dataset_complex_long.csv"
+csv_path = "../../data/formal3_training_dataset_reim_long.csv"
 df = pd.read_csv(csv_path)
 
 df_unique = df.drop_duplicates(subset=['design']).sort_values('design')
@@ -198,7 +198,7 @@ for i, (index, row) in enumerate(df_unique.iterrows()):
 X_dataset = torch.stack(X_tensors)
 
 # 保存张量文件到本地，供 FNO 训练直接读取
-output_path = "../../data/fno_input_geometry_dataset.pt"
+output_path = "../../data/fno2_input_geometry_dataset.pt"
 torch.save(X_dataset, output_path)
 
 generate_target_tensor(csv_path)
