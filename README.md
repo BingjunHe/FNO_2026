@@ -41,7 +41,7 @@ pip install torch==2.13.0 torchvision==0.28.0 torchaudio==2.11.0 --index-url [ht
 
 ### 4. 运行项目
 所有环境配置完成后，
-进入`src\model\processing`运行`prediction.py`
+进入`src\model\processing`运行`dataProcessing.py`
 生成3D网格的tensor，就是在data里面的pt文件
 切换到 `src` 文件夹并运行 `main.py` 主程序：
 ```bash
