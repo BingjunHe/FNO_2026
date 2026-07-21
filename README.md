@@ -26,11 +26,24 @@ pip install -r requirements.txt
 ```
 > 💡 *注：标准的 pip 批量安装命令需要加上 `-r` 参数，且文件名通常为复数 `requirements.txt`。*
 
-### 3. 手动安装对应版本的 CUDA
-请根据项目对深度学习框架（如 PyTorch）的版本要求，前往 NVIDIA 官网手动下载并安装对应版本的 CUDA Toolkit，以确保 GPU 算力可以被正常调用。
+### 3. 安装对应版本的 CUDA
+ 硬件驱动检查 (显卡关键步)
+在安装深度学习框架前，请在 Windows 终端中执行以下命令，务必确认你的 NVIDIA 驱动版本：
+```bash
+nvidia-smi
+```
+⚠️ 注意：请检查表格右上角的 CUDA Version。若其版本 低于 12.6，请前往 NVIDIA 官网下载并更新最新的显卡驱动（Game Ready 或 Studio 驱动均可），否则底层 C++ 内存分配器在找不到 GPU 时会触发无能狂怒的 Warning 警告。
+
+针对 torch==2.13.0 版本，强制重装官方指定的 CUDA 12.6 精准镜像包（体积约为几 GB，带有完整的底层频域变换硬件规划器）：
+```bash
+pip install torch==2.13.0 torchvision==0.28.0 torchaudio==2.11.0 --index-url [https://download.pytorch.org/whl/cu126](https://download.pytorch.org/whl/cu126) --force-reinstall
+```
 
 ### 4. 运行项目
-所有环境配置完成后，切换到 `src` 文件夹并运行 `main.py` 主程序：
+所有环境配置完成后，
+进入`src\model\processing`运行`prediction.py`
+生成3D网格的tensor，就是在data里面的pt文件
+切换到 `src` 文件夹并运行 `main.py` 主程序：
 ```bash
 cd src
 python main.py
