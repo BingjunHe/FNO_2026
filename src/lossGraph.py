@@ -43,7 +43,7 @@ if "data_loss_epoch" in df.columns:
     plt.plot(
         train_df["epoch"],
         train_df["data_loss_epoch"],
-        label="Data Loss (监督)",
+        label="Data Loss",
         color="#2ca02c",
         alpha=0.7,
     )
@@ -51,7 +51,7 @@ if "physics_loss_epoch" in df.columns:
     plt.plot(
         train_df["epoch"],
         train_df["physics_loss_epoch"],
-        label="Physics Loss (无源约束)",
+        label="Physics Loss",
         color="#d62728",
         alpha=0.7,
     )
@@ -64,7 +64,7 @@ plt.grid(True, linestyle=":", alpha=0.6)
 plt.legend(fontsize=10, loc="upper right")
 
 # 如果损失值跨度巨大，建议取消下方这行的注释，开启对数坐标轴
-# plt.yscale('log')
+plt.yscale('log')
 
 # 6. 保存到本地
 output_image_path = "../output/loss_curve.png"
