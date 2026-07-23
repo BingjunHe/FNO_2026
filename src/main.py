@@ -114,7 +114,7 @@ def main():
     # 5. 定义强大的 Trainer（闪电训练器）
     # 这里的参数是让 3D FNO 稳定运行且不爆显存的关键
     trainer = L.Trainer(
-        max_epochs=50,
+        max_epochs=100,
         accelerator="auto",       # 自动检测并使用 GPU/TPU/CPU
         devices=1,                # 指定使用 1 张显卡
         
