@@ -15,7 +15,7 @@ def main():
     csv_path = "../../data/formal3_training_dataset_reim_long.csv"
     #formal2_training_dataset_complex_long.csv 小数据
     #formal3_training_dataset_reim_long.csv 大数据
-    checkpoint_path = "../model/model-checkpoint/fno-3d-epoch=49-val_loss=2.9017.ckpt"
+    checkpoint_path = "../model/model-checkpoint/fno-3d-epoch=09-val_loss=34.3363.ckpt"
     target_design = "Design0148"  # 目标对比设计
     
     print(f"🚀 开始自动化对比流程，目标样本: {target_design}")
@@ -62,7 +62,7 @@ def main():
         in_neurons=1,
         hidden_neurons=32,
         out_neurons=1,
-        modesSpace=12,
+        modesSpace=32,
         input_size=4,
         learning_rate=1e-3,
         restart_at_epoch_n=50,
@@ -74,14 +74,13 @@ def main():
     checkpoint = torch.load(checkpoint_path, map_location=device)
     state_dict = checkpoint["state_dict"]
 
-    # 3. 把所有末尾带 2 维的权重转成复数张量
+    # 3. 【修正核心】把 Checkpoint 中的原生复数权重，转换为模型需要的末尾带 2 的实数张量
     new_state_dict = {}
     for key, param in state_dict.items():
-        # 判断是否是实虚部分开的权重（最后一维是2）
-        if param.shape[-1] == 2 and param.dtype != torch.complex64:
-            # [..., 2] -> 转成复数张量 [...], dtype=complex64
-            param_complex = torch.view_as_complex(param.contiguous())
-            new_state_dict[key] = param_complex
+        # 如果是原生的复数张量（Cleft/Complex类型），通过 view_as_real 拆分为 [..., 2] 的实数张量
+        if param.is_complex():
+            param_real = torch.view_as_real(param.contiguous())
+            new_state_dict[key] = param_real
         else:
             new_state_dict[key] = param
 
