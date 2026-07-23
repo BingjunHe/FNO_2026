@@ -11,20 +11,22 @@ class FreqSmoothnessModule(nn.Module):
         
         # 可学习的频域复数滤波器，初始化为全通(1.0)
         self.R_theta = nn.Parameter(
-            torch.ones(channels, self.freq_features, dtype=torch.cfloat)
+            torch.view_as_real(
+                torch.ones(channels, self.freq_features, dtype=torch.cfloat)
+            ).contiguous()
         )
         
     def forward(self, x):
         # 输入 x 形状: [B, 4, 601]
-        
-        # 1. 变换到频域
-        x_ft = torch.fft.rfft(x, dim=-1)
-        
-        # 2. 自适应滤波 (压制导致曲线起毛刺的高频噪声)
-        x_ft_smooth = x_ft * self.R_theta
-        
-        # 3. 逆变换回 601 个频点
-        x_smooth = torch.fft.irfft(x_ft_smooth, n=self.freq_points, dim=-1)
-        
-        # 4. 微波曲线带有负值，这里使用 GELU 或不加激活均可，建议不加激活保持 S 参数原貌
-        return x_smooth
+        with torch.autocast(device_type=x.device.type, enabled=False):
+            # 1. 变换到频域
+            x_ft = torch.fft.rfft(x.float(), dim=-1)
+            
+            # 2. 自适应滤波 (压制导致曲线起毛刺的高频噪声)
+            x_ft_smooth = x_ft * torch.view_as_complex(self.R_theta.contiguous())
+            
+            # 3. 逆变换回 601 个频点
+            x_smooth = torch.fft.irfft(x_ft_smooth, n=self.freq_points, dim=-1)
+            
+            # 4. 微波曲线带有负值，这里使用 GELU 或不加激活均可，建议不加激活保持 S 参数原貌
+        return x_smooth.to(x.dtype)

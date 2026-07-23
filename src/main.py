@@ -5,6 +5,7 @@ from torch.utils.data import Dataset, DataLoader
 import lightning as L
 from lightning.pytorch.callbacks import ModelCheckpoint, LearningRateMonitor
 from lightning.pytorch.callbacks import RichProgressBar
+from lightning.pytorch.plugins.precision import MixedPrecision
 
 from model.FNOModel import FNOModel
 
@@ -44,6 +45,8 @@ class HexFilterDataset(Dataset):
 def main():
     # 固定随机种子，确保你的偏微分方程（PDE）求解实验完全可复现
     L.seed_everything(42)
+
+    torch.set_float32_matmul_precision("high")
 
     # 指向你在上一步运行几何预处理代码后生成的 .pt 文件
     GEOMETRY_FILE = "../data/fno2_input_geometry_dataset.pt"
@@ -102,6 +105,12 @@ def main():
     # 监控学习率变换的回调函数
     lr_monitor = LearningRateMonitor(logging_interval="epoch")
 
+    # 配置 16 位混合精度训练插件
+    amp_plugin = MixedPrecision(
+                precision="16-mixed",
+                device="cuda",
+                scaler=torch.amp.GradScaler("cuda", init_scale=64.0),
+            )
     # 5. 定义强大的 Trainer（闪电训练器）
     # 这里的参数是让 3D FNO 稳定运行且不爆显存的关键
     trainer = L.Trainer(
@@ -110,9 +119,7 @@ def main():
         devices=1,                # 指定使用 1 张显卡
         
         # 【核心优化】开启 16 位混合精度训练（AMP）
-        # 这会让 3D 空间的前向和反向传播显存开销直接砍掉近 50%，同时成倍提升计算速度
-        precision="16-mixed",     
-        
+        plugins=[amp_plugin],
         callbacks=[checkpoint_callback, lr_monitor, RichProgressBar()],
         log_every_n_steps=10,
         

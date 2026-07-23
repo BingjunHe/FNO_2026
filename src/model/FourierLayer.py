@@ -3,6 +3,12 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 
+def _complex_parameter(value):
+    """Store a complex tensor as two real channels for AMP-compatible gradients."""
+    return nn.Parameter(torch.view_as_real(value).contiguous())
+
+def _as_complex(parameter):
+    return torch.view_as_complex(parameter.contiguous())
 
 class FourierLayer(nn.Module):
     def __init__(self, in_neurons, out_neurons, modesSpace, scaling=True):
@@ -18,16 +24,16 @@ class FourierLayer(nn.Module):
             self.scale = 1
             
         #self.weights  = nn.Parameter(self.scale * torch.rand(in_neurons, out_neurons, self.modesSpace * 2, self.modesSpace * 2, self.modesTime, dtype=torch.cfloat))
-        self.weight_channel = nn.Parameter(
+        self.weight_channel = _complex_parameter(
             self.scale * torch.rand(in_neurons, out_neurons, dtype=torch.cfloat)
         )
-        self.weight_x = nn.Parameter(
+        self.weight_x = _complex_parameter(
             self.scale * torch.rand(out_neurons, modesSpace * 2, dtype=torch.cfloat)
         )
-        self.weight_y = nn.Parameter(
+        self.weight_y = _complex_parameter(
             self.scale * torch.rand(out_neurons, modesSpace * 2, dtype=torch.cfloat)
         )
-        self.weight_z = nn.Parameter(
+        self.weight_z = _complex_parameter(
             self.scale * torch.rand(out_neurons, modesSpace * 2, dtype=torch.cfloat)
         )
 
@@ -53,34 +59,36 @@ class FourierLayer(nn.Module):
 
     def forward(self, x):
         batchsize = x.shape[0]
-        x_ft = torch.fft.fftn(x, dim=[-3, -2, -1])
-        xShapeLast = x.shape[-1]
-        del x
-        x_ft = torch.fft.fftshift(x_ft, dim=(-3, -2, -1))
+        with torch.autocast(device_type=x.device.type, enabled=False):
+            x_ft = torch.fft.fftn(x, dim=[-3, -2, -1])
+            del x
+            x_ft = torch.fft.fftshift(x_ft, dim=(-3, -2, -1))
 
-        out_ft = torch.zeros(batchsize, self.out_neurons, x_ft.size(-3), x_ft.size(-2), x_ft.size(-1), dtype=torch.cfloat, device=x_ft.device) # device=x.device
-        midX, midY, midZ =  x_ft.size(-3) // 2, x_ft.size(-2) // 2, x_ft.size(-1) // 2
-        
-        #out_ft[..., midX - self.modesSpace:midX + self.modesSpace, midY - self.modesSpace:midY + self.modesSpace, :self.modesTime] = \
-        #    self.compl_mul3d(x_ft[..., midX - self.modesSpace:midX + self.modesSpace, midY - self.modesSpace:midY + self.modesSpace, :self.modesTime], self.weights)
-        x_slice = x_ft[..., midX - self.modesSpace:midX + self.modesSpace, 
-                           midY - self.modesSpace:midY + self.modesSpace, 
-                           midZ - self.modesSpace:midZ + self.modesSpace]
-        out_slice = torch.einsum("bixyz, io -> boxyz", x_slice, self.weight_channel)
+            out_ft = torch.zeros(batchsize, self.out_neurons, x_ft.size(-3), x_ft.size(-2), x_ft.size(-1), dtype=x_ft.dtype, device=x_ft.device) # device=x.device
+            midX, midY, midZ =  x_ft.size(-3) // 2, x_ft.size(-2) // 2, x_ft.size(-1) // 2
+            
+            #out_ft[..., midX - self.modesSpace:midX + self.modesSpace, midY - self.modesSpace:midY + self.modesSpace, :self.modesTime] = \
+            #    self.compl_mul3d(x_ft[..., midX - self.modesSpace:midX + self.modesSpace, midY - self.modesSpace:midY + self.modesSpace, :self.modesTime], self.weights)
+            x_slice = x_ft[..., midX - self.modesSpace:midX + self.modesSpace, 
+                            midY - self.modesSpace:midY + self.modesSpace, 
+                            midZ - self.modesSpace:midZ + self.modesSpace]
+            out_slice = torch.einsum(
+                "bixyz,io->boxyz", x_slice, _as_complex(self.weight_channel)
+            )
 
-        #switch the order of the weights to match the einsum
-        wx = self.weight_x.view(1, self.out_neurons, self.modesSpace * 2, 1, 1)
-        wy = self.weight_y.view(1, self.out_neurons, 1, self.modesSpace * 2, 1)
-        wz = self.weight_z.view(1, self.out_neurons, 1, 1, self.modesSpace * 2)
-        out_slice = out_slice * wx * wy * wz
-        out_ft[..., midX - self.modesSpace:midX + self.modesSpace, 
-                   midY - self.modesSpace:midY + self.modesSpace, 
-                   midZ - self.modesSpace:midZ + self.modesSpace] = out_slice
-        del x_ft, out_slice, x_slice
+            #switch the order of the weights to match the einsum
+            wx = _as_complex(self.weight_x).view(1, self.out_neurons, self.modesSpace * 2, 1, 1)
+            wy = _as_complex(self.weight_y).view(1, self.out_neurons, 1, self.modesSpace * 2, 1)
+            wz = _as_complex(self.weight_z).view(1, self.out_neurons, 1, 1, self.modesSpace * 2)
+            out_slice = out_slice * wx * wy * wz
+            out_ft[..., midX - self.modesSpace:midX + self.modesSpace, 
+                    midY - self.modesSpace:midY + self.modesSpace, 
+                    midZ - self.modesSpace:midZ + self.modesSpace] = out_slice
+            del x_ft, out_slice, x_slice
 
-        #iFFT
-        out_ft = torch.fft.fftshift(out_ft, dim=(-3, -2, -1))
-        out_ft = torch.fft.ifftn(out_ft, dim=[-3, -2, -1]).real
+            #iFFT
+            out_ft = torch.fft.fftshift(out_ft, dim=(-3, -2, -1))
+            out_ft = torch.fft.ifftn(out_ft, dim=[-3, -2, -1]).real
         return out_ft
     
 class FourierLayer1D(nn.Module):
@@ -91,21 +99,24 @@ class FourierLayer1D(nn.Module):
         self.modes = modes  # 频域保留的模态数
         self.scale = (1 / (in_channels * out_channels))
         # 频域复数权重
-        self.weights = nn.Parameter(self.scale * torch.rand(in_channels, out_channels, self.modes, dtype=torch.cfloat))
+        self.weights = _complex_parameter(
+            self.scale * torch.rand(in_channels, out_channels, self.modes, dtype=torch.cfloat)
+        )
 
     def forward(self, x):
         # 输入维度: [B, in_channels, Freq_Points] (例如 [B, 128, 601])
         B, C, F = x.shape
         
         # Step 1: 沿频率轴进行一维快速傅里叶变换 (RFFT)
-        x_ft = torch.fft.rfft(x, dim=-1)
+        with torch.autocast(device_type=x.device.type, enabled=False):
+            x_ft = torch.fft.rfft(x.float(), dim=-1)
         
-        # Step 2: 初始化频域输出张量
-        out_ft = torch.zeros(B, self.out_channels, F // 2 + 1, device=x.device, dtype=torch.cfloat)
-        
-        # Step 3: 乘上滤波器权重（只对低频的前 modes 个模态进行矩阵乘法，高频置零以平滑曲线）
-        out_ft[:, :, :self.modes] = torch.einsum("bix,iox->box", x_ft[:, :, :self.modes], self.weights)
-        
-        # Step 4: 一维逆快速傅里叶变换 (IRFFT)，精确还原回 F 个频点
-        x = torch.fft.irfft(out_ft, n=F, dim=-1)
-        return x
+            # Step 2: 初始化频域输出张量
+            out_ft = torch.zeros(B, self.out_channels, F // 2 + 1, device=x.device, dtype=torch.cfloat)
+            
+            # Step 3: 乘上滤波器权重（只对低频的前 modes 个模态进行矩阵乘法，高频置零以平滑曲线）
+            out_ft[:, :, :self.modes] = torch.einsum("bix,iox->box", x_ft[:, :, :self.modes], _as_complex(self.weights))
+            
+            # Step 4: 一维逆快速傅里叶变换 (IRFFT)，精确还原回 F 个频点
+            x = torch.fft.irfft(out_ft, n=F, dim=-1)
+        return x.to(x.dtype)
