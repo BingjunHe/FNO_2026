@@ -16,14 +16,13 @@ z = np.linspace(z_min, z_max, Nz)
 X, Y, Z = np.meshgrid(x, y, z, indexing='ij')
 
 # ==================== 2. 生成目标张量 (Target Tensor) ====================
-def generate_target_tensor(csv_path, output_dir="data"):
+def generate_target_tensor(csv_path, output_path):
     # 1. 读取 CSV 文件
     df = pd.read_csv(csv_path)
     
     # 2. 获取所有独立的设计 (共 80.0 个)
     designs = sorted(df['design'].unique())
-    
-    os.makedirs(output_dir, exist_ok=True)
+
     Y_list = []
     
     print(f"🚀 正在解析 {len(designs)}.0 个设计的扫频 S 参数...")
@@ -39,8 +38,8 @@ def generate_target_tensor(csv_path, output_dir="data"):
         
     # 3. 组合并保存
     Y_tensor = torch.tensor(np.array(Y_list), dtype=torch.float32)  # 形状: [80.0, 4.0, 601.0]
-    
-    output_path = "../../data/fno2_target_fields.pt"
+
+    #output_path = "../../data/fno_target_fields.pt"
     torch.save(Y_tensor, output_path)
     
     print(f"✅ Target 文件打包成功！已保存至: {output_path}")
@@ -93,7 +92,9 @@ def get_rotated_window_mask(X, Z, p1, p2, width, thickness):
     return cond_along & cond_across
 
 # ==================== 3. 参数配置与严格精度坐标计算 ====================
-csv_path = "../../data/formal2_training_dataset_complex_long.csv"
+csv_path = "../../data/formal3_training_dataset_reim_long.csv"
+# formal2_training_dataset_complex_long.csv 是小数据集，便于调试
+# formal3_training_dataset_reim_long.csv 是大数据集，包含更多样本
 df = pd.read_csv(csv_path)
 df_unique = df.drop_duplicates(subset=['design']).sort_values('design')
 print(f"📊 成功读取原始数据，共检测到 {len(df_unique)} 个独特的设计几何(Design)")
@@ -145,8 +146,8 @@ for i, (index, row) in enumerate(df_unique.iterrows()):
         grid_3d[win_3d_mask] = 1.0
 
     # --- 步骤 C: 植入 7 个金属调谐螺杆 ---
-    rls = [row['F3_Rl1'], row['F3_Rl2'], row['F3_Rl3'], row['F3_Rl4'], 
-           row['F3_Rl5'], row['F3_Rl6'], row['F3_Rl7']]
+    rls = [row['F3_Rl1'], row['F3_Rl2'], row['F3_Rl3'], 4.52, 
+           row['F3_Rl3'], row['F3_Rl2'], row['F3_Rl1']]
     for j, (xc, zc) in enumerate(cavity_centers):
         post_length = rls[j]
         post_2d_mask = ((X - xc)**2 + (Z - zc)**2) <= (rad_p**2)
@@ -173,5 +174,7 @@ print("\n打包数据集...")
 X_dataset = torch.stack(X_tensors)
 output_path = "../../data/fno2_input_geometry_dataset.pt"
 torch.save(X_dataset, output_path)
+
+generate_target_tensor(csv_path, output_path="../../data/fno2_target_fields.pt")
 
 print(f"🎉 转换完成! FNO 输入张量维度 (Batch, Channel, Nx, Ny, Nz): {X_dataset.shape}")
