@@ -22,7 +22,7 @@ class ModelCallbacks(L.Callback):
 
 
 class FNOModel(L.LightningModule):
-    def __init__(self, num_layers, in_neurons, hidden_neurons, out_neurons, modesSpace, modesTime, input_size, learning_rate, restart_at_epoch_n, train_loader, loss_function):
+    def __init__(self, num_layers, in_neurons, hidden_neurons, out_neurons, modesSpace, input_size, learning_rate, restart_at_epoch_n, train_loader, loss_function):
         super().__init__()
         #self.save_hyperparameters()
         self.learning_rate = learning_rate
@@ -42,7 +42,7 @@ class FNOModel(L.LightningModule):
         # Network architechture
         self.p = nn.Linear(input_size, out_neurons)
         
-        self.fourier = nn.ModuleList([FourierLayer(in_neurons, out_neurons, modesSpace, modesTime) for _ in range(self.l)])
+        self.fourier = nn.ModuleList([FourierLayer(in_neurons, out_neurons, modesSpace) for _ in range(self.l)])
         self.mlp = nn.ModuleList([MLP(out_neurons, hidden_neurons, out_neurons, kernel_size=1) for _ in range(self.l)])
         self.w = nn.ModuleList([nn.Conv3d(in_neurons, out_neurons, kernel_size=1) for _ in range(self.l)])
         

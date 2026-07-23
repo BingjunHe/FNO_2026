@@ -5,13 +5,12 @@ import torch.nn.functional as F
 
 
 class FourierLayer(nn.Module):
-    def __init__(self, in_neurons, out_neurons, modesSpace, modesTime, scaling=True):
+    def __init__(self, in_neurons, out_neurons, modesSpace, scaling=True):
         super().__init__()
         
         self.in_neurons = in_neurons
         self.out_neurons = out_neurons
         self.modesSpace = modesSpace
-        self.modesTime = modesTime
         
         if scaling:
             self.scale = 1 / (self.in_neurons * self.out_neurons)
@@ -66,17 +65,17 @@ class FourierLayer(nn.Module):
         #    self.compl_mul3d(x_ft[..., midX - self.modesSpace:midX + self.modesSpace, midY - self.modesSpace:midY + self.modesSpace, :self.modesTime], self.weights)
         x_slice = x_ft[..., midX - self.modesSpace:midX + self.modesSpace, 
                            midY - self.modesSpace:midY + self.modesSpace, 
-                           midZ - self.modesTime:midZ + self.modesTime]
+                           midZ - self.modesSpace:midZ + self.modesSpace]
         out_slice = torch.einsum("bixyz, io -> boxyz", x_slice, self.weight_channel)
 
         #switch the order of the weights to match the einsum
         wx = self.weight_x.view(1, self.out_neurons, self.modesSpace * 2, 1, 1)
         wy = self.weight_y.view(1, self.out_neurons, 1, self.modesSpace * 2, 1)
-        wz = self.weight_z.view(1, self.out_neurons, 1, 1, self.modesTime * 2)
+        wz = self.weight_z.view(1, self.out_neurons, 1, 1, self.modesSpace * 2)
         out_slice = out_slice * wx * wy * wz
         out_ft[..., midX - self.modesSpace:midX + self.modesSpace, 
                    midY - self.modesSpace:midY + self.modesSpace, 
-                   midZ - self.modesTime:midZ + self.modesTime] = out_slice
+                   midZ - self.modesSpace:midZ + self.modesSpace] = out_slice
         del x_ft, out_slice, x_slice
 
         #iFFT

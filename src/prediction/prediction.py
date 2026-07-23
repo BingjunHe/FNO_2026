@@ -13,8 +13,10 @@ def main():
     # ==================== 1. 环境与路径配置 ====================
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     csv_path = "../../data/formal3_training_dataset_reim_long.csv"
-    checkpoint_path = "../model/model-checkpoint/fno-3d-epoch=24-val_MSE_loss=0.0909.ckpt"
-    target_design = "Design00064"  # 目标对比设计
+    #formal2_training_dataset_complex_long.csv 小数据
+    #formal3_training_dataset_reim_long.csv 大数据
+    checkpoint_path = "../model/model-checkpoint/fno-3d-epoch=49-val_loss=2.9017.ckpt"
+    target_design = "Design0148"  # 目标对比设计
     
     print(f"🚀 开始自动化对比流程，目标样本: {target_design}")
 
@@ -54,20 +56,37 @@ def main():
     input_tensor = generate_geometry_tensor(cw12, cw23, cw34, rl1, rl2, rl3).to(device)
 
     print("🔮 正在加载 FNO 模型权重并进行前向传播...")
-    model = FNOModel.load_from_checkpoint(
-        checkpoint_path, 
-        num_layers=4,
+    # 1. 先实例化当前版本的模型
+    model = FNOModel(
+        num_layers=8,
         in_neurons=1,
         hidden_neurons=32,
         out_neurons=1,
         modesSpace=12,
-        modesTime=12,
         input_size=4,
         learning_rate=1e-3,
         restart_at_epoch_n=50,
         train_loader=None,
-        loss_function='MSE'
+        loss_function='L2'
     ).to(device)
+
+    # 2. 手动加载 checkpoint 的 state_dict
+    checkpoint = torch.load(checkpoint_path, map_location=device)
+    state_dict = checkpoint["state_dict"]
+
+    # 3. 把所有末尾带 2 维的权重转成复数张量
+    new_state_dict = {}
+    for key, param in state_dict.items():
+        # 判断是否是实虚部分开的权重（最后一维是2）
+        if param.shape[-1] == 2 and param.dtype != torch.complex64:
+            # [..., 2] -> 转成复数张量 [...], dtype=complex64
+            param_complex = torch.view_as_complex(param.contiguous())
+            new_state_dict[key] = param_complex
+        else:
+            new_state_dict[key] = param
+
+    # 4. 加载转换后的权重
+    model.load_state_dict(new_state_dict, strict=True)
     model.eval()
 
     with torch.no_grad():

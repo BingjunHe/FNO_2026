@@ -3,9 +3,10 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 class SParamHybridLoss(nn.Module):
-    def __init__(self, alpha=0.5):
+    def __init__(self, alpha=0.5, valley_weight=5.0):
         super().__init__()
         self.alpha = alpha  # dB 损失的权重
+        self.valley_weight = valley_weight  # 对深谷区域的追加惩罚倍数
 
     def forward(self, y_hat, y):
         """
@@ -46,8 +47,20 @@ class SParamHybridLoss(nn.Module):
         s21_db_hat = torch.clamp(s21_db_hat, min=-60.0)
         s21_db_true = torch.clamp(s21_db_true, min=-60.0)
         
-        # 计算 dB 域的 MSE
-        db_loss = F.mse_loss(s11_db_hat, s11_db_true) + F.mse_loss(s21_db_hat, s21_db_true)
+        # 计算每个频点的绝对误差平方
+        s11_squared_error = (s11_db_hat - s11_db_true) ** 2
+        s21_squared_error = (s21_db_hat - s21_db_true) ** 2
+        
+        # 动态创建权重矩阵：如果真实值低于 -15 dB（说明进入了敏感的阻带/谐振谷），权重放大 valley_weight 倍
+        s11_weight = torch.where(s11_db_true < -15.0, self.valley_weight, 1.0)
+        s21_weight = torch.where(s21_db_true < -15.0, self.valley_weight, 1.0)
+        
+        # 计算加权后的 MSE
+        db_loss = torch.mean(s11_squared_error * s11_weight) + torch.mean(s21_squared_error * s21_weight)
+        
+        # ================= 4. 【追加高级防御】引入无穷范数（最大误差惩罚） =================
+        # 强迫网络去拉低那个全波段误差最大的点（通常就是那个没对齐的尖峰）
+        max_error = torch.mean(torch.max(s11_squared_error, dim=-1)[0]) + torch.mean(torch.max(s21_squared_error, dim=-1)[0])
 
-        # ================= 3. 混合总损失 =================
-        return rel_l2_loss + self.alpha * db_loss
+        # 最终混合总损失 (额外拨出 0.1 的权重给最大误差项)
+        return rel_l2_loss + self.alpha * db_loss + 0.1 * max_error
